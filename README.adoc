@@ -3,6 +3,8 @@
 Ansible playbooks using https://docs.openstack.org/openstack-ansible/wallaby/user/aio/quickstart.html[OpenStack-Ansible]
 for automatically configuring a local VM to develop with.
 
+This project was built to support a series of blogs published on https://dev.to (https://dev.to/wsidl/series/12878[Learn OpenStack by Example])
+
 == Install Project
 
 Clone Project to a local directory and setup Python with required dependencies:
