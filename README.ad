@@ -1,0 +1,46 @@
+= Openstack-Ansible Quick AIO
+
+Ansible playbooks using https://docs.openstack.org/openstack-ansible/wallaby/user/aio/quickstart.html[OpenStack-Ansible]
+for automatically configuring a local VM to develop with.
+
+== Install Project
+
+Clone Project to a local directory and setup Python with required dependencies:
+
+```bash
+git clone https://github.com/wsidl/openstack-aio
+cd openstack-aio
+poetry install
+```
+
+== Configure playbooks for your environment
+
+From the `inventory/host_vars.yml.example` and copy this to `inventory/host_vars.yml`.
+This file contains variables that help the playbooks
+decide which components to install.
+
+Variables of concern include:
+
+localhost.ansible_become_password:: (**Required**) This is your user account password for raising super-user (sudo) privileges
+
+localhost.virtualization.system:: (**Required**) Virtualization Subsystem (currently only supports "kvm")
+
+openstack.admin_password:: (**Required**) Secure Password for logging into OpenStack
+
+openstack.extra_components:: List of extra components to be installed
+
+== Run Playbooks
+
+While in the repository directory, run the ansible playbooks
+
+The first configures your environment with the necessary Ansible modules for setting up your project.
+```bash
+ansible-playbook 1_bootstrap.yml
+```
+
+While the second script will configure your VM environment with the network, VM hardware resources, and
+finally install OpenStack
+
+```bash
+ansible-playbook 2_host_vm.yml
+```

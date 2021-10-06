@@ -1,0 +1,19 @@
+#cloud-config
+users:
+  - name: stack
+    ssh-authorized-keys:
+      - {{ssh_key}}
+    sudo: ['ALL=(ALL) NOPASSWD:ALL']
+    groups: sudo
+    shell: /bin/bash
+growpart:
+  mode: auto
+  device: ["/"]
+  ignore_growroot_disabled: False
+package_update: true
+package_upgrade: true
+packages:
+  - qemu-guest-agent
+runcmd:
+  - [systemctl, enable, qemu-guest-agent]
+  - [systemctl, start, qemu-guest-agent]

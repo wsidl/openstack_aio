@@ -1,0 +1,12 @@
+---
+- name: Setup Project Environment
+  hosts: localhost
+  tasks:
+    - name: Install Ansible Roles
+      community.general.ansible_galaxy_install:
+        requirements_file: requirements.yml
+        type: role
+    - name: Install Ansible Collections
+      community.general.ansible_galaxy_install:
+        requirements_file: requirements.yml
+        type: collection

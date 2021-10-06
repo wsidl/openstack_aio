@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<network>
+  <name>os_net</name>
+  <forward mode="nat">
+    <nat>
+      <port start="1024" end="65535"/>
+    </nat>
+  </forward>
+  <bridge name="{{ virtualization.network.bridge }}" delay="0"/>
+  <mac address="{{ bridge_mac }}"/>
+  <ip address="{{ gateway_ip }}" netmask="{{ subnet_mask }}">
+    <dhcp>
+      <range start="{{ virtualization.network.cidr | ansible.netcommon.ipaddr('1') | ansible.netcommon.ipaddr('address') }}" end="{{ virtualization.network.cidr | ansible.netcommon.ipaddr('-2') | ansible.netcommon.ipaddr('address') }}"/>
+      <host mac="{{ iface1_mac }}" name="openstack" ip="{{ iface1_ip }}"/>
+      <host mac="{{ iface2_mac }}" name="os_net" ip="{{ iface2_ip }}"/>
+    </dhcp>
+  </ip>
+</network>

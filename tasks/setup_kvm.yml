@@ -1,0 +1,93 @@
+---
+- name: Install Software Requirements
+  import_role:
+    name: jm1.libvirt.setup
+- name: Check Network exists
+  failed_when: false
+  community.libvirt.virt_net:
+    command: facts
+    name: os_net
+- name: Create new libvirt network
+  community.libvirt.virt_net:
+    command: define
+    name: os_net
+    xml: '{{lookup("template", "../templates/vnet.xml.j2") }}'
+  when: ansible_libvirt_networks.os_net is not defined
+- name: Load Network Details
+  community.libvirt.virt_net:
+    command: facts
+    name: os_net
+- name: Activate Network
+  community.libvirt.virt_net:
+    state: active
+    name: os_net
+  when: ansible_libvirt_networks.os_net.state != "active"
+- name: Set Autostart
+  community.libvirt.virt_net:
+    autostart: true
+    name: os_net
+  when: ansible_libvirt_networks.os_net.autostart == "no"
+- name: Check Pool exists
+  community.libvirt.virt_pool:
+    name: "{{ virtualization.volumes.pool }}"
+    command: facts
+- name: Get CloudImg Ubuntu
+  jm1.libvirt.volume_import:
+    pool: "{{ virtualization.volumes.pool }}"
+    name: ubuntu-20.04-server-cloudimg-amd64.img
+    image: https://cloud-images.ubuntu.com/releases/focal/release/ubuntu-20.04-server-cloudimg-amd64.img
+    format: qcow2
+- name: Build Block Volume
+  jm1.libvirt.volume:
+    pool: "{{ virtualization.volumes.pool }}"
+    name: openstack_block.qcow2
+    capacity: 50G
+    format: qcow2
+- name: Build Root Volume
+  jm1.libvirt.volume_snapshot:
+    pool: "{{ virtualization.volumes.pool }}"
+    name: openstack_root.qcow2
+    capacity: 100G
+    format: qcow2
+    backing_vol: "ubuntu-20.04-server-cloudimg-amd64.img"
+    backing_vol_format: qcow2
+    linked: false
+- name: Write User-Data Cloud Config
+  ansible.builtin.template:
+    src: "{{ playbook_dir }}/tasks/user_data.yml.j2"
+    dest: "{{ playbook_dir }}/tasks/user_data.yml"
+- name: Build OpenStack VM
+  jm1.libvirt.domain:
+    name: openstack
+    hardware:
+      - cpu: host
+      - vcpus: "8"
+      - memory: "8192"
+      - virt_type: kvm
+      - graphics: spice,listen=none
+      - console: pty,target_type=serial
+      - os-type: linux
+      - os-variant: ubuntu20.04
+      - disk: "{{ ansible_libvirt_pools[virtualization.volumes.pool].path }}/openstack_root.qcow2,boot.order=2,bus=sata"
+      - disk: "{{ ansible_libvirt_pools[virtualization.volumes.pool].path }}/openstack_block.qcow2,bus=sata"
+      - network: "network=os_net,mac={{ iface1_mac }},model=virtio"
+      - network: "network=os_net,mac={{ iface2_mac }},model=virtio"
+      - cloud-init: "meta-data={{ playbook_dir }}/tasks/meta_data.yml,user-data={{ playbook_dir }}/tasks/user_data.yml"
+  register: create_domain
+- name: Get Domain IP Addresses
+  community.libvirt.virt_net:
+    name: os_net
+    command: info
+  register: domain_nets
+- name: Set Domain IP Addresses
+  set_fact:
+    iface1_ip: "{{ domain_nets.networks.os_net | community.general.json_query('dhcp_leases[?hostname==`openstack`].ipaddr') | first }}"
+    iface1_mac: "{{ domain_nets.networks.os_net | community.general.json_query('dhcp_leases[?hostname==`openstack`].mac') | first }}"
+- name: Wait for VM to be Network Accessible
+  register: ping
+  until: ping.stdout.find("0% packet loss") != -1
+  retries: 40
+  delay: 1
+  ansible.builtin.command: "ping -c 1 {{ iface1_ip }}"
+  changed_when: False
+

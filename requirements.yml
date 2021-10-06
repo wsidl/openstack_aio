@@ -1,0 +1,8 @@
+---
+collections:
+  - name: jm1.libvirt
+  - name: community.libvirt
+  - name: community.general
+  - name: ansible.netcommon
+roles:
+  - name: jm1.common

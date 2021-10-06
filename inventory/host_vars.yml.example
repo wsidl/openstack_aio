@@ -1,0 +1,23 @@
+---
+local:
+  hosts:
+    localhost:
+      ansible_become_password: ""
+      virtualization:
+        system: kvm
+        network:
+          bridge: br-os
+          cidr: 192.168.200.0/27
+        volumes:
+          pool: default
+vm:
+  hosts:
+    openstack:
+      openstack:
+        branch: stable/wallaby
+        admin_password: ""
+        extra_components:
+          - swift
+        bootstrap_options:
+          bootstrap_host_data_disk_device: sdb
+          bootstrap_host_public_interface: enp2s0

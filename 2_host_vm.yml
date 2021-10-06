@@ -1,0 +1,102 @@
+---
+# Setup New VM
+- name: Setup OpenStack VM
+  hosts: local
+  tasks:
+  - name: Setup System Variables (1)
+    set_fact:
+      mac_prefix: "52:54:00"
+  - name: Setup System Variables (2)
+    set_fact:
+      bridge_mac: "{{ mac_prefix | community.general.random_mac | upper }}"
+      gateway_ip: "{{ virtualization.network.cidr | ansible.netcommon.ipaddr('1') | ansible.netcommon.ipaddr('address') }}"
+      subnet_mask: "{{ virtualization.network.cidr | ansible.netcommon.ipaddr('netmask') }}"
+      broadcast_ip: "{{ virtualization.network.cidr | ansible.netcommon.ipaddr('-1') | ansible.netcommon.ipaddr('address') }}"
+      iface1_mac: "{{ mac_prefix | community.general.random_mac | upper }}"
+      iface2_mac: "{{ mac_prefix | community.general.random_mac | upper }}"
+      iface1_ip: "{{ virtualization.network.cidr | ansible.netcommon.ipaddr('2') | ansible.netcommon.ipaddr('address') }}"
+      iface2_ip: "{{ virtualization.network.cidr | ansible.netcommon.ipaddr('3') | ansible.netcommon.ipaddr('address') }}"
+      ssh_key: "{{ lookup('file', '/home/$USER/.ssh/id_rsa.pub') }}"
+  - name: Setup OpenStack VM Host on KVM
+    import_tasks: tasks/setup_kvm.yml
+    when: virtualization.system == "kvm"
+
+- name: Get OpenStack-Ansible Setup and Bootstrapped
+  hosts: vm
+  tasks:
+    - name: Ensure Cloud-Init still isn't running
+      ansible.builtin.command: cloud-init status
+      register: cloud
+      until: "cloud.stdout.find('status: done') != -1 or cloud.stdout.find('status: disabled') != -1"
+      retries: 40
+      delay: 1
+      changed_when: False
+    - name: Ensure Git Project pulled
+      register: git_path
+      stat:
+        path: /opt/openstack
+    - name: Pull Git Repository
+      when: git_path.stat.exists == False
+      ansible.builtin.git:
+        repo: https://opendev.org/openstack/openstack-ansible
+        version: "{{ openstack.branch }}"
+        dest: /opt/openstack
+      register: git_repo
+    - name: Check Ansible Bootstrap Setup
+      register: ansible_stat
+      stat:
+        path: /etc/ansible
+      changed_when: False
+    - name: Setup OpenStack-Ansible Environment
+      become: yes
+      when: ansible_stat.stat.exists == False
+      ansible.builtin.command:
+        chdir: /opt/openstack
+        cmd: scripts/bootstrap-ansible.sh
+
+- name: Bootstrap AIO
+  hosts: vm
+  tasks:
+    - name: Check Ansible Bootstrap Setup
+      register: deploy_stat
+      stat:
+        path: /etc/openstack_deploy
+    - name: Run Bootstrap Script
+      become: yes
+      when: deploy_stat.stat.exists == False
+      ansible.builtin.command:
+        chdir: /opt/openstack
+        cmd: scripts/bootstrap-aio.sh
+      environment:
+        SCENARIO: "aio_lxc_source_{{ openstack.extra_components | join('_') }}"
+        BOOTSTRAP_OPTS: "{{ openstack.bootstrap_options.items() | map('join', '=') | join(' ') }}"
+    - name: Update Keystone Admin Password
+      become: yes
+      replace:
+        path: /etc/openstack_deploy/user_secrets.yml
+        regexp: "keystone_auth_admin_password: .*"
+        replace: "keystone_auth_admin_password: {{ openstack.admin_password }}"
+    - name: Disable Tempest
+      become: yes
+      replace:
+        path: /etc/openstack_deploy/user_variables.yml
+        regexp: "{{ item }}: .*"
+        replace: "{{ item }}: false"
+      loop:
+        - tempest_install
+        - tempest_run
+    - name: Setup Hosts
+      become: yes
+      ansible.builtin.command:
+        chdir: /opt/openstack/playbooks
+        cmd: openstack-ansible setup-hosts.yml
+    - name: Setup Infrastructure
+      become: yes
+      ansible.builtin.command:
+        chdir: /opt/openstack/playbooks
+        cmd: openstack-ansible setup-infrastructure.yml
+    - name: Setup OpenStack
+      become: yes
+      ansible.builtin.command:
+        chdir: /opt/openstack/playbooks
+        cmd: openstack-ansible setup-openstack.yml
